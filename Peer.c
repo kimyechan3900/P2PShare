@@ -175,7 +175,7 @@ int main(int argc, char **argv)
                 }
                 
                 
-                // 연결된 클라이언트 소켓을 배열에 추가
+                // 연결된 연결 소켓을 배열에 추가
                 for (i = 0; i < MAXPEERS; i++) {
                     if(i != my_index){
                         if (peer_info[i].fd == 0) {
@@ -188,10 +188,10 @@ int main(int argc, char **argv)
             
             
             // 클라이언트로부터의 데이터 수신 및 처리
-            for (i = 0; i < MAXPEERS; i++) {
+            for (i = 0; i < MAXPEERS; i++) { // 반복하면서 peer이 연결 소켓을 하나하나 모니터링한다.
                 if(i != my_index){
                     int client_fd = peer_info[i].fd;
-                    if (FD_ISSET(client_fd, &read_fds)) {
+                    if (FD_ISSET(client_fd, &read_fds)) { // 특정 연결 소켓에서 이벤트 발생
                         if ((valread = read(client_fd, buffer, BUFFER_SIZE)) == 0) {
                             // 클라이언트가 연결을 종료한 경우
                             close(client_fd);
@@ -347,7 +347,7 @@ void* broadcast (void) //연결된 모든 동료들에 대해 파일을 전송�
 {
     
     while(1){
-        if(broadcast_signal==1){ //브로드 캐스트 신호가 켜지면 시작 // 기본값은 0
+        if(broadcast_signal==1){ //브로드 캐스트 신호가 켜지면 시작 -> packet_check()가 제어 // 기본값은 0
           
             int client_fd;
             struct sockaddr_in server_addr;
@@ -360,20 +360,20 @@ void* broadcast (void) //연결된 모든 동료들에 대해 파일을 전송�
                 if(i != my_index){
                     // 클라이언트 소켓 생성
                     client_fd = socket(AF_INET, SOCK_STREAM, 0);
-                    setsockopt(client_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+                    setsockopt(client_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)); // 소켓을 재사용 가능하게 옵션 변경 -> 소켓을 닫아도 동일 상대한테 다시 보내려고 하면 동일한 fd를 사용하게함.
                     
                     if (client_fd == -1) {
                         perror("socket failed");
                         exit(EXIT_FAILURE);
                     }
                     server_addr.sin_family = AF_INET;
-                    server_addr.sin_port = htons(peer_info[i].port);
-                    if (inet_pton(AF_INET, peer_info[i].ip, &(server_addr.sin_addr)) <= 0) {
+                    server_addr.sin_port = htons(peer_info[i].port); // 목적지 상대 port 주소 세팅
+                    if (inet_pton(AF_INET, peer_info[i].ip, &(server_addr.sin_addr)) <= 0) { // 목적지 상대 ip 세팅
                         perror("inet_pton failed");
                         exit(EXIT_FAILURE);
                     }
                     
-                    if (connect(client_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
+                    if (connect(client_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) { // connect() 시도
                         perror("connect failed");
                         exit(EXIT_FAILURE);
                     }
@@ -390,8 +390,8 @@ void* broadcast (void) //연결된 모든 동료들에 대해 파일을 전송�
                     // 파일 데이터를 서버로 전송
                     ssize_t bytesRead;
                     int check;
-                    while ((bytesRead = fread(buffer, 1, BUFFER_SIZE, file)) > 0) {
-                        check = write(client_fd, buffer, bytesRead);
+                    while ((bytesRead = fread(buffer, 1, BUFFER_SIZE, file)) > 0) { // test.txt에서 쿼리 목록 읽기
+                        check = write(client_fd, buffer, bytesRead); // 연결된 상대에게 버퍼에 있는 쿼리 목록 전송
                         if (check == -1) {
                             perror("write failed");
                             exit(EXIT_FAILURE);
@@ -415,21 +415,21 @@ void* broadcast (void) //연결된 모든 동료들에 대해 파일을 전송�
 
 int search(void) // 파일에서 단어를 읽고, 각 단어의 개수를 세어 정렬하여 출력하는 모듈
 {
-    FILE *file5;
+    FILE *file;
     char buffer[MAX_WORDS_LENGTH]; // 쿼리 최대 길이
     WordInfo words[MAX_NUM_WORDS]; // 쿼리 최대 개수 구조체 배열
     int numWords = 0; // 단어 개수
 
     // 파일 열기
-    file5 = fopen("test.txt", "r");
-    if (file5 == NULL)
+    file = fopen("test.txt", "r");
+    if (file == NULL)
     {
         perror("Error opening file");
         exit(1);
     }
 
     // 각 단어의 개수 세기
-    while (fgets(buffer, sizeof(buffer), file5) != NULL) // 파일에서 한 줄씩 buffer로 읽어옴
+    while (fgets(buffer, sizeof(buffer), file) != NULL) // 파일에서 한 줄씩 buffer로 읽어옴
     {
         // 개행 문자 제거
         if (buffer[strlen(buffer) - 1] == '\n')
@@ -455,7 +455,7 @@ int search(void) // 파일에서 단어를 읽고, 각 단어의 개수를 세�
             words[numWords].count = 1; // 특정 단어의 검색 횟수
             numWords++; // 구조체 배열에 있는 단어 개수
         }
-    } //  while (fgets(buffer, sizeof(buffer), file5) != NULL)
+    } //  while (fgets(buffer, sizeof(buffer), file) != NULL)
 
     // 문장을 개수별로 정렬 - qsort
     qsort(words, numWords, sizeof(WordInfo), compare);
@@ -470,20 +470,20 @@ int search(void) // 파일에서 단어를 읽고, 각 단어의 개수를 세�
     printf("\033[0;35m--------------------------------------------------------------------------\033[0m\n\n");
 
     // 파일 닫기
-    fclose(file5);
+    fclose(file);
 
     return 0;
 }
 
 
-int compare(const void *a, const void *b) // search()내 qsort()에 필요한 비교 함수
+int compare(const void *a, const void *b) // search()내 qsort()에 필요한 비교 함수 -> 내림차순 정렬
 {
     WordInfo *wordA = (WordInfo *)a;
     WordInfo *wordB = (WordInfo *)b;
     return wordB->count - wordA->count;
 }
 
-void timer()
+void timer() // 원하는 값에 따라 업데이트 전 대기 시간 안내 및 실시간 검색어 출력 시점 제어
 {
     int remaining_time = TIMER;
 
@@ -501,3 +501,4 @@ void timer()
     printf("\033[0;35m--------------------------------------------------------------------------\033[0m\n\n");
     search();
 }
+
